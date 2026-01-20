@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Database files (will be created at runtime)
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+backend/docker-scheduler
+
+# Documentation
+*.md
+!README.md
+
+# Gemini artifacts
+.gemini

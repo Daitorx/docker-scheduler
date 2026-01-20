@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Programa la ejecución de contenedores Docker en horarios específicos">
+    <title>Docker Scheduler</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text y='20' font-size='20'>🐳</text></svg>">
+    <link rel="stylesheet" href="/css/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <div class="logo">
+                    <svg viewBox="0 0 640 512" fill="currentColor">
+                        <path
+                            d="M349.9 236.3h-66.1v-59.4h66.1v59.4zm0-204.3h-66.1v60.7h66.1V32zm78.2 144.8H362v59.4h66.1v-59.4zm-156.3-72.1h-66.1v60.1h66.1v-60.1zm78.1 0h-66.1v60.1h66.1v-60.1zm276.8 100c-14.4-9.7-47.6-13.2-73.1-8.4-3.3-24-16.7-44.9-41.1-63.7l-14-9.3-9.3 14c-18.4 27.8-23.4 73.6-3.7 103.8-8.7 4.7-25.8 11.1-48.4 10.7H2.4c-8.7 50.8 5.8 116.8 44 162.1 37.1 43.9 92.7 66.2 165.4 66.2 157.4 0 273.9-72.5 328.4-204.2 21.4.4 67.6.1 91.3-45.2 1.5-2.5 6.6-13.2 8.5-17.1l-13.3-8.9zm-511.1-27.9h-66v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm78.1 0h-66.1v59.4h66.1v-59.4zm-78.1-72.1h-66.1v60.1h66.1v-60.1z" />
+                    </svg>
+                    <h1 data-i18n="title">Docker Scheduler</h1>
+                </div>
+                <div class="lang-switcher">
+                    <button onclick="changeLanguage('en')" id="langEn">EN</button>
+                    <span class="divider">|</span>
+                    <button onclick="changeLanguage('es')" id="langEs">ES</button>
+                </div>
+            </div>
+            <p class="subtitle" data-i18n="subtitle">Schedule automatic execution of your Docker containers</p>
+        </header>
+
+        <main>
+            <section class="form-section glass-card">
+                <h2 data-i18n="newSchedule">New Schedule</h2>
+                <form id="scheduleForm">
+                    <div class="form-group">
+                        <label for="containerName" data-i18n="imageLabel">Image Name</label>
+                        <input type="text" id="containerName" data-i18n="imagePlaceholder"
+                            placeholder="e.g., nginx, redis, my-app" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="runName"><span data-i18n="containerLabel">Container Name</span> <span
+                                    class="optional" data-i18n="optional">(optional)</span></label>
+                            <input type="text" id="runName" placeholder="e.g., my-nginx">
+                        </div>
+                        <div class="form-group">
+                            <label for="ports"><span data-i18n="portsLabel">Ports</span> <span class="optional"
+                                    data-i18n="optional">(optional)</span></label>
+                            <input type="text" id="ports" placeholder="e.g., 8080:80, 3000:3000">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="autoRemove" checked>
+                            <span data-i18n="autoRemoveLabel">Auto-remove container on finish</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label data-i18n="daysLabel">Execution Days</label>
+                        <div class="days-selector">
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="monday">
+                                <span>Mon</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="tuesday">
+                                <span>Tue</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="wednesday">
+                                <span>Wed</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="thursday">
+                                <span>Thu</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="friday">
+                                <span>Fri</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="saturday">
+                                <span>Sat</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" name="days" value="sunday">
+                                <span>Sun</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label data-i18n="hoursLabel">Execution Hours</label>
+                        <div id="timesContainer" class="times-container">
+                            <div class="time-row">
+                                <input type="time" class="time-input" required>
+                                <button type="button" class="btn-remove" onclick="removeTimeRow(this)"
+                                    style="visibility: hidden;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M18 6L6 18M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-secondary" id="addTime">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            <span data-i18n="addTimeBtn">Add Time</span>
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label><span data-i18n="envLabel">Environment Variables</span> <span class="optional"
+                                data-i18n="optional">(optional)</span></label>
+                        <div id="envVarsContainer" class="env-vars-container">
+                        </div>
+                        <button type="button" class="btn-secondary" id="addEnvVar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            <span data-i18n="addEnvBtn">Add Variable</span>
+                        </button>
+                    </div>
+
+                    <button type="submit" class="btn-primary">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        <span data-i18n="createBtn">Create Schedule</span>
+                    </button>
+                </form>
+            </section>
+
+            <section class="schedules-section">
+                <h2 data-i18n="schedulesTitle">Configured Schedules</h2>
+                <div id="schedulesList" class="schedules-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p data-i18n="loadingSchedules">Loading schedules...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="history-section">
+                <div class="section-header">
+                    <h2 data-i18n="historyTitle">Execution History</h2>
+                    <button type="button" class="btn-clear-history" onclick="clearHistory()" data-i18n="clearHistoryBtn"
+                        title="Clear history">
+                        Clear
+                    </button>
+                </div>
+                <div id="historyList" class="history-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p data-i18n="loadingHistory">Loading history...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="containers-section">
+                <h2 data-i18n="containersTitle">Running Containers</h2>
+                <div id="containersList" class="containers-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p data-i18n="loadingContainers">Loading containers...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p data-i18n="footer">Docker Scheduler &copy; 2026</p>
+        </footer>
+    </div>
+
+    <!-- Exception Date Modal -->
+    <div id="exceptionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Gestionar Excepciones</h3>
+                <button class="btn-close" onclick="closeExceptionModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Añade fechas o rangos de fechas en las que este schedule NO debe ejecutarse
+                </p>
+                <div class="add-exception-form">
+                    <div class="date-range-row">
+                        <div class="date-input-group">
+                            <label>Desde</label>
+                            <input type="date" id="exceptionDateFrom">
+                        </div>
+                        <div class="date-input-group">
+                            <label>Hasta <span class="optional">(opcional)</span></label>
+                            <input type="date" id="exceptionDateTo">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-secondary btn-full" onclick="addExceptionDates()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        Añadir Fecha(s)
+                    </button>
+                </div>
+                <div id="exceptionsList" class="exceptions-list">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div id="confirmModal" class="modal confirm-modal">
+        <div class="modal-content confirm-content">
+            <p id="confirmMessage"></p>
+            <div class="confirm-actions">
+                <button class="btn-cancel" onclick="closeConfirmModal(false)" data-i18n="cancelBtn">Cancel</button>
+                <button class="btn-confirm" onclick="closeConfirmModal(true)" data-i18n="confirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    <div id="toast" class="toast"></div>
+
+    <!-- Log Viewer Modal -->
+    <div id="logModal" class="modal log-modal-modern">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="header-title">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 17l6-6-6-6M12 19h8" />
+                    </svg>
+                    <h3 id="logModalTitle">Log Viewer</h3>
+                </div>
+                <button class="close-modal-btn" onclick="closeLogModal()">
+                    &times;
+                </button>
+            </div>
+            <div class="modal-body log-modal-body">
+                <pre><code id="logModalContent"></code></pre>
+            </div>
+            <div class="modal-footer"
+                style="border-top: 1px solid #334155; padding: 1rem; display: flex; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="closeLogModal()" data-i18n="close">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js?v=7"></script>
+</body>
+
+</html>

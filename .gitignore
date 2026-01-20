@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+
+# Go
+/backend/docker-scheduler
+*.exe
+*.test
+*.out
+
+# Data / DB
+/backend/schedules.db
+/data/*
+!/data/.gitkeep
+
+# Editor
+.vscode/
+.idea/
