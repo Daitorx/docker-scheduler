@@ -1,6 +1,9 @@
 // API Base URL
 const API_URL = '/api';
 
+// Track expanded schedule groups (persists across re-renders)
+const expandedGroups = new Set();
+
 // Day translations
 const dayTranslations = {
     monday: { es: 'Lun', en: 'Mon' },
@@ -168,6 +171,12 @@ function changeLanguage(lang) {
 
 function t(key) {
     return translations[currentLang][key] || key;
+}
+
+// Toggle collapsible form section
+function toggleFormSection() {
+    const formSection = document.querySelector('.form-section');
+    formSection.classList.toggle('collapsed');
 }
 
 function updateLanguageUI() {
@@ -476,28 +485,42 @@ function renderSchedules(schedules) {
     });
 
     // Render grouped schedules
-    list.innerHTML = Object.entries(groups).map(([containerName, containerSchedules]) => `
-        <div class="schedule-group">
-            <div class="schedule-group-header" onclick="toggleGroup(this)">
-                <div class="group-info">
+    list.innerHTML = Object.entries(groups).map(([containerName, containerSchedules]) => {
+        const isExpanded = expandedGroups.has(containerName);
+        const allActive = containerSchedules.every(s => s.active);
+        const someActive = containerSchedules.some(s => s.active);
+        const scheduleIds = containerSchedules.map(s => s.id).join(',');
+
+        return `
+        <div class="schedule-group ${isExpanded ? 'expanded' : ''}" data-group="${escapeHtml(containerName)}">
+            <div class="schedule-group-header">
+                <div class="group-info" onclick="toggleGroup(this.parentElement)">
                     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M9 18l6-6-6-6"/>
                     </svg>
                     <span class="group-name">${escapeHtml(containerName)}</span>
                     <span class="group-count">${containerSchedules.length}</span>
                 </div>
+                <div class="group-actions">
+                    <button class="btn-icon" onclick="toggleGroupSchedules('${scheduleIds}', ${!allActive})" title="${allActive ? t('disableSchedule') : t('enableSchedule')}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="${allActive ? 'text-success' : (someActive ? 'text-warning' : 'text-muted')}">
+                            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                            <line x1="12" y1="2" x2="12" y2="12"></line>
+                        </svg>
+                    </button>
+                    <button class="btn-icon delete" onclick="deleteGroupSchedules('${scheduleIds}', '${escapeHtml(containerName)}')" title="${t('deleteBtn')}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="schedule-group-content">
                 ${containerSchedules.map(schedule => renderScheduleCard(schedule)).join('')}
             </div>
         </div>
-    `).join('');
-
-    // Auto-expand removed. They will be collapsed by default (CSS assumes .expanded to show).
-    // Ensure CSS hides content when not expanded.
-    // If CSS uses .schedule-group-content { display: none } and .expanded .schedule-group-content { display: block }
-    // Then checking default:
-    // User wants "Todo recogido" (collapsed).
+    `}).join('');
 }
 
 // Render individual schedule card
@@ -632,7 +655,46 @@ function removeRandomTime() {
 // Toggle group expand/collapse
 function toggleGroup(header) {
     const group = header.closest('.schedule-group');
+    const groupName = group.dataset.group;
+    const isExpanding = !group.classList.contains('expanded');
+
     group.classList.toggle('expanded');
+
+    // Track state for persistence across re-renders
+    if (isExpanding) {
+        expandedGroups.add(groupName);
+    } else {
+        expandedGroups.delete(groupName);
+    }
+}
+
+// Toggle all schedules in a group
+async function toggleGroupSchedules(scheduleIdsStr, setActive) {
+    const ids = scheduleIdsStr.split(',').map(id => parseInt(id));
+    for (const id of ids) {
+        try {
+            await fetch(`${API_URL}/schedules/${id}/toggle`, { method: 'PUT' });
+        } catch (e) {
+            console.error('Error toggling schedule', id, e);
+        }
+    }
+    await loadSchedules();
+}
+
+// Delete all schedules in a group
+async function deleteGroupSchedules(scheduleIdsStr, containerName) {
+    if (!confirm(`¿Eliminar todos los schedules de ${containerName}?`)) return;
+
+    const ids = scheduleIdsStr.split(',').map(id => parseInt(id));
+    for (const id of ids) {
+        try {
+            await fetch(`${API_URL}/schedules/${id}`, { method: 'DELETE' });
+        } catch (e) {
+            console.error('Error deleting schedule', id, e);
+        }
+    }
+    await loadSchedules();
+    showToast(t('toastScheduleDeleted'), 'success');
 }
 
 // Handle form submission
@@ -1301,7 +1363,10 @@ window.toggleSchedule = toggleSchedule;
 window.deleteSchedule = deleteSchedule;
 window.openExceptionModal = openExceptionModal;
 window.toggleGroup = toggleGroup;
+window.toggleGroupSchedules = toggleGroupSchedules;
+window.deleteGroupSchedules = deleteGroupSchedules;
 window.toggleEnvExpandable = toggleEnvExpandable;
 window.closeConfirmModal = closeConfirmModal;
 window.closeLogModal = closeLogModal;
+window.toggleFormSection = toggleFormSection;
 

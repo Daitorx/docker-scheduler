@@ -307,7 +307,6 @@ input[type="text"]::placeholder {
     align-items: center;
     justify-content: space-between;
     padding: 0.875rem 1rem;
-    cursor: pointer;
     transition: background 0.15s ease;
 }
 
@@ -319,6 +318,23 @@ input[type="text"]::placeholder {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    cursor: pointer;
+    flex: 1;
+}
+
+.group-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.group-actions .btn-icon {
+    width: 28px;
+    height: 28px;
+}
+
+.text-warning {
+    color: #f59e0b !important;
 }
 
 .group-info .chevron {
@@ -558,6 +574,36 @@ footer {
 .glass-card {
     display: block;
     /* Placeholder to avoid empty ruleset */
+}
+
+/* Collapsible section header */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    margin-bottom: 1rem;
+}
+
+.section-header h2 {
+    margin: 0;
+}
+
+.section-header .chevron {
+    width: 18px;
+    height: 18px;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+    transform: rotate(90deg);
+}
+
+.form-section.collapsed .section-header .chevron {
+    transform: rotate(0deg);
+}
+
+.form-section.collapsed form {
+    display: none;
 }
 
 /* Environment Variables */

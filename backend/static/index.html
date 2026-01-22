@@ -34,7 +34,12 @@
 
         <main>
             <section class="form-section glass-card">
-                <h2 data-i18n="newSchedule">New Schedule</h2>
+                <div class="section-header" onclick="toggleFormSection()">
+                    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 18l6-6-6-6"/>
+                    </svg>
+                    <h2 data-i18n="newSchedule">New Schedule</h2>
+                </div>
                 <form id="scheduleForm">
                     <div class="form-group">
                         <label for="containerName" data-i18n="imageLabel">Image Name</label>
