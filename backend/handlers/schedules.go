@@ -48,7 +48,7 @@ func CreateSchedule(c *gin.Context) {
 		autoRemove = *req.AutoRemove
 	}
 
-	schedule, err := database.CreateSchedule(req.ContainerName, req.RunName, req.Ports, autoRemove, req.Days, req.Times, req.ExceptionDates, req.EnvVars)
+	schedule, err := database.CreateSchedule(req.ContainerName, req.RunName, req.Ports, autoRemove, req.Days, req.Times, req.ExceptionDates, req.EnvVars, req.RandomDelay)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -95,7 +95,6 @@ func ToggleSchedule(c *gin.Context) {
 	// Refresh scheduler
 	scheduler.RefreshSchedules()
 
-	// Return updated schedule
 	schedule, _ := database.GetScheduleByID(id)
 	c.JSON(http.StatusOK, schedule)
 }

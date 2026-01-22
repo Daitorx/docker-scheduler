@@ -69,6 +69,7 @@ func Initialize(dbPath string) error {
 	DB.Exec("ALTER TABLE schedules ADD COLUMN run_name TEXT DEFAULT ''")
 	DB.Exec("ALTER TABLE schedules ADD COLUMN ports TEXT DEFAULT '[]'")
 	DB.Exec("ALTER TABLE schedules ADD COLUMN auto_remove BOOLEAN DEFAULT 1")
+	DB.Exec("ALTER TABLE schedules ADD COLUMN random_delay INTEGER DEFAULT 0")
 
 	// Add status column if it doesn't exist (migration)
 	_, err = DB.Exec("ALTER TABLE execution_logs ADD COLUMN status TEXT DEFAULT 'completed'")
@@ -80,9 +81,14 @@ func Initialize(dbPath string) error {
 	// Add docker_name column if it doesn't exist (migration)
 	_, err = DB.Exec("ALTER TABLE execution_logs ADD COLUMN docker_name TEXT DEFAULT ''")
 	if err != nil && err.Error() != "duplicate column name: docker_name" {
-		// Ignore error if column exists
 		log.Printf("Migration warning (docker_name): %v", err)
 	}
+
+	// Add scheduled_time column (migration)
+	DB.Exec("ALTER TABLE execution_logs ADD COLUMN scheduled_time TEXT DEFAULT ''")
+
+	// Add random_delay column (migration)
+	DB.Exec("ALTER TABLE execution_logs ADD COLUMN random_delay INTEGER DEFAULT 0")
 
 	log.Println("Database initialized successfully")
 	return nil
@@ -114,7 +120,7 @@ func parseScheduleRow(s *models.Schedule, daysJSON, timesJSON, exceptionDatesJSO
 // GetAllSchedules returns all schedules from the database
 func GetAllSchedules() ([]models.Schedule, error) {
 	rows, err := DB.Query(`
-		SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at 
+		SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(random_delay, 0), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at 
 		FROM schedules 
 		ORDER BY created_at DESC
 	`)
@@ -127,7 +133,7 @@ func GetAllSchedules() ([]models.Schedule, error) {
 	for rows.Next() {
 		var s models.Schedule
 		var daysJSON, timesJSON, exceptionDatesJSON, envVarsJSON, portsJSON string
-		err := rows.Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
+		err := rows.Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &s.RandomDelay, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +147,7 @@ func GetAllSchedules() ([]models.Schedule, error) {
 // GetActiveSchedules returns only active schedules
 func GetActiveSchedules() ([]models.Schedule, error) {
 	rows, err := DB.Query(`
-		SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at 
+		SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(random_delay, 0), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at 
 		FROM schedules 
 		WHERE active = 1
 	`)
@@ -154,7 +160,7 @@ func GetActiveSchedules() ([]models.Schedule, error) {
 	for rows.Next() {
 		var s models.Schedule
 		var daysJSON, timesJSON, exceptionDatesJSON, envVarsJSON, portsJSON string
-		err := rows.Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
+		err := rows.Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &s.RandomDelay, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -166,7 +172,7 @@ func GetActiveSchedules() ([]models.Schedule, error) {
 }
 
 // CreateSchedule adds a new schedule to the database
-func CreateSchedule(containerName string, runName string, ports []string, autoRemove bool, days []string, times []string, exceptionDates []string, envVars map[string]string) (*models.Schedule, error) {
+func CreateSchedule(containerName string, runName string, ports []string, autoRemove bool, days []string, times []string, exceptionDates []string, envVars map[string]string, randomDelay int) (*models.Schedule, error) {
 	daysJSON, err := json.Marshal(days)
 	if err != nil {
 		return nil, err
@@ -202,8 +208,8 @@ func CreateSchedule(containerName string, runName string, ports []string, autoRe
 	}
 
 	result, err := DB.Exec(
-		"INSERT INTO schedules (container_name, run_name, ports, auto_remove, days, times, exception_dates, env_vars) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		containerName, runName, string(portsJSON), autoRemove, string(daysJSON), string(timesJSON), string(exceptionDatesJSON), string(envVarsJSON),
+		"INSERT INTO schedules (container_name, run_name, ports, auto_remove, days, times, random_delay, exception_dates, env_vars) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		containerName, runName, string(portsJSON), autoRemove, string(daysJSON), string(timesJSON), randomDelay, string(exceptionDatesJSON), string(envVarsJSON),
 	)
 	if err != nil {
 		return nil, err
@@ -218,6 +224,7 @@ func CreateSchedule(containerName string, runName string, ports []string, autoRe
 		AutoRemove:     autoRemove,
 		Days:           days,
 		Times:          times,
+		RandomDelay:    randomDelay,
 		ExceptionDates: exceptionDates,
 		EnvVars:        envVars,
 		Active:         true,
@@ -241,9 +248,9 @@ func GetScheduleByID(id int) (*models.Schedule, error) {
 	var s models.Schedule
 	var daysJSON, timesJSON, exceptionDatesJSON, envVarsJSON, portsJSON string
 	err := DB.QueryRow(
-		"SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at FROM schedules WHERE id = ?",
+		"SELECT id, container_name, COALESCE(run_name, ''), COALESCE(ports, '[]'), COALESCE(auto_remove, 1), days, COALESCE(times, '[]'), COALESCE(random_delay, 0), COALESCE(exception_dates, '[]'), COALESCE(env_vars, '{}'), active, created_at FROM schedules WHERE id = ?",
 		id,
-	).Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
+	).Scan(&s.ID, &s.ContainerName, &s.RunName, &portsJSON, &s.AutoRemove, &daysJSON, &timesJSON, &s.RandomDelay, &exceptionDatesJSON, &envVarsJSON, &s.Active, &s.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -293,13 +300,13 @@ func RemoveExceptionDate(id int, date string) error {
 }
 
 // CreateExecutionLog creates a new log entry with "running" status
-func CreateExecutionLog(scheduleID int, containerName string, dockerName string) (int, error) {
-	statement, err := DB.Prepare("INSERT INTO execution_logs (schedule_id, container_name, docker_name, executed_at, status, success, output, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+func CreateExecutionLog(scheduleID int, containerName string, dockerName string, scheduledTime string, randomDelay int) (int, error) {
+	statement, err := DB.Prepare("INSERT INTO execution_logs (schedule_id, container_name, docker_name, scheduled_time, random_delay, executed_at, status, success, output, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return 0, err
 	}
 	executedAt := time.Now().Format("2006-01-02 15:04:05")
-	res, err := statement.Exec(scheduleID, containerName, dockerName, executedAt, "running", false, "", "")
+	res, err := statement.Exec(scheduleID, containerName, dockerName, scheduledTime, randomDelay, executedAt, "running", false, "", "")
 	if err != nil {
 		return 0, err
 	}
@@ -331,9 +338,7 @@ func UpdateExecutionLog(id int, success bool, output string, errorMsg string) er
 
 // LogExecution records a container execution in the database (Legacy wrapper)
 func LogExecution(scheduleID int, containerName string, success bool, output string, errorMsg string) error {
-	// This function is now a legacy wrapper. It needs to be updated or removed if dockerName is always available.
-	// For now, it calls the new CreateExecutionLog with an empty dockerName.
-	id, err := CreateExecutionLog(scheduleID, containerName, "") // Pass empty string for dockerName
+	id, err := CreateExecutionLog(scheduleID, containerName, "", "", 0)
 	if err != nil {
 		return err
 	}
@@ -346,7 +351,7 @@ func GetExecutionHistory(limit int) ([]models.ExecutionLog, error) {
 		limit = 50
 	}
 
-	rows, err := DB.Query("SELECT id, COALESCE(schedule_id, 0), container_name, COALESCE(docker_name, ''), executed_at, COALESCE(status, 'completed'), success, COALESCE(output, ''), COALESCE(error, '') FROM execution_logs ORDER BY executed_at DESC LIMIT ?", limit)
+	rows, err := DB.Query("SELECT id, COALESCE(schedule_id, 0), container_name, COALESCE(docker_name, ''), COALESCE(scheduled_time, ''), COALESCE(random_delay, 0), executed_at, COALESCE(status, 'completed'), success, COALESCE(output, ''), COALESCE(error, '') FROM execution_logs ORDER BY executed_at DESC LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +360,7 @@ func GetExecutionHistory(limit int) ([]models.ExecutionLog, error) {
 	var logs []models.ExecutionLog
 	for rows.Next() {
 		var log models.ExecutionLog
-		if err := rows.Scan(&log.ID, &log.ScheduleID, &log.ContainerName, &log.DockerName, &log.ExecutedAt, &log.Status, &log.Success, &log.Output, &log.Error); err != nil {
+		if err := rows.Scan(&log.ID, &log.ScheduleID, &log.ContainerName, &log.DockerName, &log.ScheduledTime, &log.RandomDelay, &log.ExecutedAt, &log.Status, &log.Success, &log.Output, &log.Error); err != nil {
 			return nil, err
 		}
 		logs = append(logs, log)
@@ -372,7 +377,7 @@ func ClearExecutionHistory() error {
 
 // GetRunningExecutions returns all execution logs with status 'running'
 func GetRunningExecutions() ([]models.ExecutionLog, error) {
-	rows, err := DB.Query("SELECT id, COALESCE(schedule_id, 0), container_name, COALESCE(docker_name, ''), executed_at, COALESCE(status, 'completed'), success, COALESCE(output, ''), COALESCE(error, '') FROM execution_logs WHERE status = 'running'")
+	rows, err := DB.Query("SELECT id, COALESCE(schedule_id, 0), container_name, COALESCE(docker_name, ''), COALESCE(scheduled_time, ''), COALESCE(random_delay, 0), executed_at, COALESCE(status, 'completed'), success, COALESCE(output, ''), COALESCE(error, '') FROM execution_logs WHERE status = 'running'")
 	if err != nil {
 		return nil, err
 	}
@@ -381,7 +386,7 @@ func GetRunningExecutions() ([]models.ExecutionLog, error) {
 	var logs []models.ExecutionLog
 	for rows.Next() {
 		var log models.ExecutionLog
-		if err := rows.Scan(&log.ID, &log.ScheduleID, &log.ContainerName, &log.DockerName, &log.ExecutedAt, &log.Status, &log.Success, &log.Output, &log.Error); err != nil {
+		if err := rows.Scan(&log.ID, &log.ScheduleID, &log.ContainerName, &log.DockerName, &log.ScheduledTime, &log.RandomDelay, &log.ExecutedAt, &log.Status, &log.Success, &log.Output, &log.Error); err != nil {
 			return nil, err
 		}
 		logs = append(logs, log)

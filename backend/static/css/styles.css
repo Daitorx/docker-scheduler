@@ -135,7 +135,8 @@ header {
 }
 
 input[type="text"],
-input[type="time"] {
+input[type="time"],
+input[type="number"] {
     width: 100%;
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
@@ -149,7 +150,8 @@ input[type="time"] {
 }
 
 input[type="text"]:focus,
-input[type="time"]:focus {
+input[type="time"]:focus,
+input[type="number"]:focus {
     border-color: var(--accent-hover);
 }
 
@@ -643,6 +645,22 @@ footer {
 .btn-secondary svg {
     width: 12px;
     height: 12px;
+}
+
+
+
+/* Specific styling for Random Delay Input */
+#randomDelay {
+    max-width: 120px;
+}
+
+/* Random Badge styling */
+.random-badge {
+    background: rgba(139, 92, 246, 0.15);
+    /* Purple tint */
+    color: #a78bfa;
+    /* Light purple */
+    border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .optional {

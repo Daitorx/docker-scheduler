@@ -8,12 +8,13 @@ A self-hosted web application to schedule Docker containers execution, featuring
 
 - 📅 **Flexible Scheduling**: Schedule containers by specific days of the week.
 - ⏰ **Multiple Times**: Run the same container multiple times per day.
+- 🎲 **Random Delay**: Add natural variability to executions, avoiding predictable patterns. Each scheduled time gets its own independent random offset.
 - 🔧 **Environment Variables**: Pass custom env vars to your containers for each run.
 - 🚫 **Exception Dates**: Exclude specific dates (holidays, maintenance) from the schedule.
 - 🧹 **Auto-Remove**: Optional automatic cleanup of containers after execution.
 - 📺 **Live Logs (Auto-Refresh)**: View real-time logs of running containers in a modern terminal-style interface.
 - 📦 **Container Management**: View running containers, stop them, and configure custom names and ports.
-- 📊 **Execution History**: Track detailed status (Running/Success/Failure), grouped by container, with auto-collapsing.
+- 📊 **Execution History**: Track detailed status (Running/Success/Failure), grouped by container, with scheduled time and delay info.
 - 🌍 **Internationalization (i18n)**: Switch between **English (EN)** and **Spanish (ES)** via the header selector. (English by default).
 - 🎨 **Modern Dark UI**: Clean, minimalist interface with dark mode and mobile responsiveness. All sections collapsed by default for a cleaner view.
 - 💾 **Persistent Storage**: SQLite database for reliable data storage.

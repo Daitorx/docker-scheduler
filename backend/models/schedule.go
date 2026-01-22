@@ -1,5 +1,7 @@
 package models
 
+// TimeRange represents a time range for random scheduling
+
 // Schedule represents a scheduled Docker container execution
 type Schedule struct {
 	ID             int               `json:"id"`
@@ -9,6 +11,7 @@ type Schedule struct {
 	AutoRemove     bool              `json:"auto_remove"`        // Use --rm flag (default true)
 	Days           []string          `json:"days"`               // ["monday", "tuesday", ...]
 	Times          []string          `json:"times"`              // ["09:00", "14:30", "18:00"]
+	RandomDelay    int               `json:"random_delay"`       // Optional random delay in minutes
 	ExceptionDates []string          `json:"exception_dates"`    // ["2026-01-20", "2026-02-03"]
 	EnvVars        map[string]string `json:"env_vars"`           // {"KEY": "value", ...}
 	Active         bool              `json:"active"`
@@ -22,7 +25,8 @@ type CreateScheduleRequest struct {
 	Ports          []string          `json:"ports"`
 	AutoRemove     *bool             `json:"auto_remove"` // Pointer to detect if provided (default true)
 	Days           []string          `json:"days" binding:"required"`
-	Times          []string          `json:"times"` // Validated manually
+	Times          []string          `json:"times"` // Validated manually (required if no random_time_range)
+	RandomDelay    int               `json:"random_delay"`
 	ExceptionDates []string          `json:"exception_dates"`
 	EnvVars        map[string]string `json:"env_vars"`
 }

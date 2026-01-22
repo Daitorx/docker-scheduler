@@ -70,7 +70,17 @@ const translations = {
         toastHistoryCleared: "Historial borrado correctamente",
         toastContainerStopped: "Contenedor detenido",
         errorGeneric: "Error",
-        mon: "Lun", tue: "Mar", wed: "Mié", thu: "Jue", fri: "Vie", sat: "Sáb", sun: "Dom"
+        mon: "Lun", tue: "Mar", wed: "Mié", thu: "Jue", fri: "Vie", sat: "Sáb", sun: "Dom",
+        randomTimeTitle: "Rango Aleatorio (Opcional)",
+        randomTimeDesc: "Define un retraso máximo en minutos. La ejecución ocurrirá aleatoriamente entre la hora programada y (hora + retraso).",
+        from: "Desde",
+        to: "Hasta",
+        randomRange: "Retraso Aleatorio",
+        addRandomTimeBtn: "Añadir Retraso Aleatorio",
+        randomDelayLabel: "Retraso Máximo (minutos)",
+        disableSchedule: "Desactivar",
+        enableSchedule: "Activar",
+        nextRun: "Siguiente"
     },
     en: {
         title: "Docker Scheduler",
@@ -128,7 +138,17 @@ const translations = {
         toastHistoryCleared: "History cleared successfully",
         toastContainerStopped: "Container stopped",
         errorGeneric: "Error",
-        mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun"
+        mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun",
+        randomTimeTitle: "Random Delay (Optional)",
+        randomTimeDesc: "Defines a maximum delay in minutes. Execution will occur randomly between the scheduled time and (time + delay).",
+        from: "From",
+        to: "To",
+        randomRange: "Random Delay",
+        addRandomTimeBtn: "Add Random Delay",
+        randomDelayLabel: "Max Delay (minutes)",
+        disableSchedule: "Disable",
+        enableSchedule: "Enable",
+        nextRun: "Next"
     }
 };
 
@@ -210,6 +230,9 @@ const envVarsContainer = document.getElementById('envVarsContainer');
 const addEnvVarBtn = document.getElementById('addEnvVar');
 const timesContainer = document.getElementById('timesContainer');
 const addTimeBtn = document.getElementById('addTime');
+const randomTimeContainer = document.getElementById('randomTimeContainer');
+const addRandomTimeBtn = document.getElementById('addRandomTimeBtn');
+const randomTimeHelper = document.getElementById('randomTimeHelper');
 const exceptionModal = document.getElementById('exceptionModal');
 let historyList;
 let containersList;
@@ -225,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
     scheduleForm.addEventListener('submit', handleFormSubmit);
     addEnvVarBtn.addEventListener('click', addEnvVarRow);
     addTimeBtn.addEventListener('click', addTimeRow);
+    addRandomTimeBtn.addEventListener('click', addRandomTimeInputs);
 
     // Close modal on outside click
     window.addEventListener('click', (e) => {
@@ -397,10 +421,18 @@ function toggleEnvExpandable(btn) {
     }
 }
 
-// Format times for display
-function formatTimes(times) {
+// Format times or random range for display
+function formatTimesOrRange(times, randomDelay) {
     if (!times || times.length === 0) return '';
-    return times.map(t => `<span class="time-badge">${t}</span>`).join('');
+
+    // Check if randomDelay is present and > 0
+    let delaySuffix = '';
+    if (randomDelay && randomDelay > 0) {
+        delaySuffix = ` <span class="random-badge" title="${t('randomTimeDesc')}">(+0-${randomDelay}m)</span>`;
+    }
+
+    // Map each time and append delay info
+    return times.map(t => `<span class="time-badge">${t}${delaySuffix}</span>`).join('');
 }
 
 // Format exception dates for display
@@ -488,7 +520,7 @@ function renderScheduleCard(schedule) {
                                 ${dayLabels}
                             </div>
                             <div class="schedule-times">
-                                ${formatTimes(schedule.times)}
+                                ${formatTimesOrRange(schedule.times, schedule.random_delay)}
                             </div>
                             ${envVarsBadge}
                             ${formatExceptions(schedule.exception_dates)}
@@ -503,8 +535,7 @@ function renderScheduleCard(schedule) {
                                 <line x1="3" y1="10" x2="21" y2="10"></line>
                             </svg>
                         </button>
-                        <button class="btn-icon" onclick="toggleSchedule(${schedule.id})" title="${schedule.active ? t('close') : t('createBtn')}"> 
-                            <!-- Wait, title translation needs improvement. Toggle active/inactive. -->
+                        <button class="btn-icon" onclick="toggleSchedule(${schedule.id})" title="${schedule.active ? t('disableSchedule') : t('enableSchedule')}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="${schedule.active ? 'text-success' : 'text-muted'}">
                                 <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
                                 <line x1="12" y1="2" x2="12" y2="12"></line>
@@ -573,6 +604,31 @@ function toggleEnvExpandable(btn) {
     }
 }
 
+// Add Random Time Inputs
+function addRandomTimeInputs() {
+    randomTimeContainer.innerHTML = `
+        <div class="form-row" style="align-items: flex-end; gap: 0.5rem; display: flex;">
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="randomDelay" data-i18n="randomDelayLabel">${t('randomDelayLabel')}</label>
+                <input type="number" id="randomDelay" class="time-input" min="1" placeholder="5" required>
+            </div>
+            <button type="button" class="btn-remove" onclick="removeRandomTime()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+    `;
+    addRandomTimeBtn.style.display = 'none';
+    if (randomTimeHelper) randomTimeHelper.style.display = 'block';
+}
+
+function removeRandomTime() {
+    if (randomTimeContainer) randomTimeContainer.innerHTML = '';
+    if (addRandomTimeBtn) addRandomTimeBtn.style.display = 'flex';
+    if (randomTimeHelper) randomTimeHelper.style.display = 'none';
+}
+
 // Toggle group expand/collapse
 function toggleGroup(header) {
     const group = header.closest('.schedule-group');
@@ -592,6 +648,17 @@ async function handleFormSubmit(e) {
     if (!containerName) {
         showToast('Por favor, introduce el nombre del contenedor', 'error');
         return;
+    }
+
+    // Check for random delay
+    let randomDelay = 0;
+    const randomDelayInput = document.getElementById('randomDelay');
+
+    if (randomDelayInput) {
+        const val = parseInt(randomDelayInput.value);
+        if (val && val > 0) {
+            randomDelay = val;
+        }
     }
 
     if (selectedDays.length === 0) {
@@ -622,6 +689,7 @@ async function handleFormSubmit(e) {
                 auto_remove: autoRemove,
                 days: selectedDays,
                 times: times,
+                random_delay: randomDelay,
                 exception_dates: [],
                 env_vars: envVars
             })
@@ -634,6 +702,7 @@ async function handleFormSubmit(e) {
         scheduleForm.reset();
         clearEnvVars();
         clearTimes();
+        removeRandomTime(); // Reset random time inputs
         await loadSchedules();
         showToast('Schedule creado exitosamente', 'success');
     } catch (error) {
@@ -983,6 +1052,7 @@ function renderHistory(logs) {
                         </div>
                         <div class="history-info">
                             <span class="history-time">${formatHistoryDate(log.executed_at)}</span>
+                            ${log.scheduled_time ? `<span class="history-scheduled" style="color: var(--text-secondary); font-size: 0.7rem; margin-left: 4px;">${log.scheduled_time}${log.random_delay > 0 ? ` (+${log.random_delay}m)` : ''}</span>` : ''}
                             ${log.status === 'running'
                     ? `<span class="history-running-tag">${t('statusRunning')}</span>`
                     : (log.error ? `<span class="history-error-msg" title="${escapeHtml(log.error)}">${escapeHtml(log.error)}</span>` : '')
