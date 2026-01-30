@@ -37,9 +37,13 @@ func Initialize() {
 
 	// initial cleanup
 	go CleanupZombieExecutions()
+	go database.CleanupOldScheduledExecutions()
 
 	// Schedule periodic cleanup (every 5 minutes)
 	scheduler.Every(5).Minutes().Do(CleanupZombieExecutions)
+
+	// Schedule cleanup of old scheduled executions (daily at 2 AM)
+	scheduler.Every(1).Day().At("02:00").Do(database.CleanupOldScheduledExecutions)
 }
 
 // RefreshSchedules reloads all active schedules from the database
@@ -76,6 +80,7 @@ func RefreshSchedules() {
 
 				// If no random delay, schedule normally
 				if randomDelay <= 0 {
+					log.Printf("Scheduling Job [ID: %d] '%s' (%s) on %s at %s", scheduleID, containerName, runName, day, schedTime)
 					scheduleJob(scheduleID, containerName, runName, ports, autoRemove, envVars, exceptionDates, weekday, schedTime, 0)
 					continue
 				}
@@ -83,7 +88,7 @@ func RefreshSchedules() {
 				// If Random Delay is set: random time between `schedTime` and `schedTime + delay` minutes
 				// 1. Weekly Trigger at Midnight: Pick a random time for THAT day
 				scheduler.Every(1).Week().Weekday(weekday).At("00:00").Tag(fmt.Sprintf("sched-gen-%d", scheduleID)).Do(func(sID int, cName, rName string, pts []string, aRem bool, eVars map[string]string, eDates []string, baseTime string, delay int) {
-					finalTime := calculateRandomTimeWithDelay(baseTime, delay)
+					finalTime := calculateOrRetrieveRandomTime(sID, baseTime, delay)
 					scheduleOneOff(sID, cName, rName, pts, aRem, eVars, eDates, baseTime, delay, finalTime)
 				}, scheduleID, containerName, runName, ports, autoRemove, envVars, exceptionDates, schedTime, randomDelay)
 
@@ -95,10 +100,21 @@ func RefreshSchedules() {
 		}
 	}
 
-	log.Printf("Loaded %d schedules", len(schedules))
+	log.Printf("Loaded %d active schedules", len(schedules))
 }
 
-func calculateRandomTimeWithDelay(baseTimeStr string, delayMinutes int) string {
+// calculateOrRetrieveRandomTime gets the calculated time from DB or calculates a new one
+func calculateOrRetrieveRandomTime(scheduleID int, baseTimeStr string, delayMinutes int) string {
+	today := time.Now().Format("2006-01-02")
+
+	// Try to get existing calculated time for today
+	calculatedTime, err := database.GetScheduledExecution(scheduleID, today)
+	if err == nil && calculatedTime != "" {
+		log.Printf("Using existing calculated time for schedule %d: %s", scheduleID, calculatedTime)
+		return calculatedTime
+	}
+
+	// No existing time, calculate new one
 	baseTime, err := time.Parse("15:04", baseTimeStr)
 	if err != nil {
 		return baseTimeStr
@@ -109,11 +125,34 @@ func calculateRandomTimeWithDelay(baseTimeStr string, delayMinutes int) string {
 	duration := time.Duration(randomAdd) * time.Minute
 
 	finalTime := baseTime.Add(duration)
-	return finalTime.Format("15:04")
+	res := finalTime.Format("15:04")
+	log.Printf("Calculated random time: Base %s + %d mins offset (limit %d) = %s", baseTimeStr, randomAdd, delayMinutes, res)
+
+	// Save to database for reuse
+	database.SaveScheduledExecution(scheduleID, today, baseTimeStr, res)
+
+	return res
 }
 
 func scheduleRandomDelayOnStartup(scheduleID int, containerName, runName string, ports []string, autoRemove bool, envVars map[string]string, exceptionDates []string, baseTimeStr string, delayMinutes int) {
 	now := time.Now()
+	today := now.Format("2006-01-02")
+
+	// Check if we already calculated a time for today
+	calculatedTime, err := database.GetScheduledExecution(scheduleID, today)
+	if err == nil && calculatedTime != "" {
+		// We have a stored time, use it
+		parsed, _ := time.Parse("15:04", calculatedTime)
+		scheduled := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
+
+		if scheduled.After(now) {
+			log.Printf("Using existing calculated time for schedule %d: %s", scheduleID, calculatedTime)
+			scheduleOneOff(scheduleID, containerName, runName, ports, autoRemove, envVars, exceptionDates, baseTimeStr, delayMinutes, calculatedTime)
+		}
+		return
+	}
+
+	// No stored time, calculate new one
 	base, _ := time.Parse("15:04", baseTimeStr)
 
 	// Base time today
@@ -142,6 +181,10 @@ func scheduleRandomDelayOnStartup(scheduleID int, containerName, runName string,
 	executionTime := effectiveStart.Add(randomOffset)
 	executionTimeStr := executionTime.Format("15:04")
 
+	// Save to database for reuse
+	database.SaveScheduledExecution(scheduleID, today, baseTimeStr, executionTimeStr)
+	log.Printf("Calculated and saved random time for schedule %d: %s", scheduleID, executionTimeStr)
+
 	scheduleOneOff(scheduleID, containerName, runName, ports, autoRemove, envVars, exceptionDates, baseTimeStr, delayMinutes, executionTimeStr)
 }
 
@@ -155,10 +198,10 @@ func scheduleOneOff(scheduleID int, containerName, runName string, ports []strin
 	}
 
 	tag := fmt.Sprintf("sched-exec-%d", scheduleID)
-	var job *gocron.Job
-	var err error
 
-	job, err = scheduler.Every(1).Day().At(timeStr).Tag(tag).Do(func() {
+	// Use StartAt to schedule the job for the exact calculated time today
+	// This ensures it runs today, not tomorrow
+	job, err := scheduler.Every(1).Second().LimitRunsTo(1).StartAt(scheduled).Tag(tag).Do(func() {
 		// Check exceptions
 		today := time.Now().Format("2006-01-02")
 		for _, exDate := range exceptionDates {
@@ -170,8 +213,13 @@ func scheduleOneOff(scheduleID int, containerName, runName string, ports []strin
 		runContainer(scheduleID, containerName, runName, ports, autoRemove, envVars, scheduledTime, randomDelay)
 	})
 
-	if err == nil {
-		job.LimitRunsTo(1)
+	if err != nil {
+		log.Printf("ERROR: Failed to schedule one-off job for schedule %d at %s: %v", scheduleID, scheduled.Format("15:04"), err)
+		return
+	}
+
+	if job == nil {
+		log.Printf("ERROR: Job creation returned nil for schedule %d at %s", scheduleID, scheduled.Format("15:04"))
 	}
 }
 
@@ -189,14 +237,38 @@ func scheduleJob(scheduleID int, containerName, runName string, ports []string, 
 	})
 }
 
+// RunScheduleNow manually triggers a schedule execution
+func RunScheduleNow(id int) error {
+	schedule, err := database.GetScheduleByID(id)
+	if err != nil {
+		return err
+	}
+	if schedule == nil {
+		return fmt.Errorf("schedule not found")
+	}
+
+	// Calculate next run time just for logging purposes (as "manual")
+	manualTime := time.Now().Format("2006-01-02 15:04:05")
+
+	// Get env vars
+	envVars := make(map[string]string)
+	for k, v := range schedule.EnvVars {
+		envVars[k] = v
+	}
+
+	go runContainer(schedule.ID, schedule.ContainerName, schedule.RunName, schedule.Ports, schedule.AutoRemove, envVars, manualTime+" (Manual)", 0)
+
+	return nil
+}
+
 // runContainer runs a Docker container from an image with environment variables
 func runContainer(scheduleID int, containerName string, runName string, ports []string, autoRemove bool, envVars map[string]string, scheduledTime string, randomDelay int) {
-	log.Printf("Running container: %s", containerName)
+	log.Printf(">>> START EXECUTION [ScheduleID: %d] Container: '%s' (RunName: '%s')", scheduleID, containerName, runName)
 
 	// If container has a name, stop and remove existing container first
 	if runName != "" {
 		exec.Command("docker", "stop", runName).Run()
-		exec.Command("docker", "rm", runName).Run()
+		exec.Command("docker", "rm", "-f", runName).Run()
 	}
 
 	// Build docker run command
@@ -252,6 +324,8 @@ func runContainer(scheduleID int, containerName string, runName string, ports []
 	if logID != 0 {
 		database.UpdateExecutionLog(logID, success, string(output), errorMsg)
 	}
+
+	log.Printf("<<< END EXECUTION [ScheduleID: %d] Container: '%s' | Success: %v | Output Len: %d bytes", scheduleID, containerName, success, len(output))
 }
 
 // Stop stops the scheduler

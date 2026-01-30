@@ -40,9 +40,9 @@ const translations = {
         clearHistoryBtn: "Limpiar",
         loadingHistory: "Cargando historial...",
         emptyHistory: "No hay ejecuciones registradas",
-        containersTitle: "Contenedores en Ejecución",
+        containersTitle: "Contenedores",
         loadingContainers: "Cargando contenedores...",
-        emptyContainers: "No hay contenedores en ejecución",
+        emptyContainers: "No hay contenedores",
         footer: "Docker Scheduler © 2026",
         // Dynamic
         runs: "ejecuciones",
@@ -76,11 +76,9 @@ const translations = {
         mon: "Lun", tue: "Mar", wed: "Mié", thu: "Jue", fri: "Vie", sat: "Sáb", sun: "Dom",
         randomTimeTitle: "Rango Aleatorio (Opcional)",
         randomTimeDesc: "Define un retraso máximo en minutos. La ejecución ocurrirá aleatoriamente entre la hora programada y (hora + retraso).",
-        from: "Desde",
-        to: "Hasta",
         randomRange: "Retraso Aleatorio",
         addRandomTimeBtn: "Añadir Retraso Aleatorio",
-        randomDelayLabel: "Retraso Máximo (minutos)",
+        randomDelayLabel: "Max Delay (min)",
         disableSchedule: "Desactivar",
         enableSchedule: "Activar",
         nextRun: "Siguiente"
@@ -108,9 +106,9 @@ const translations = {
         clearHistoryBtn: "Clear",
         loadingHistory: "Loading history...",
         emptyHistory: "No execution history",
-        containersTitle: "Running Containers",
+        containersTitle: "Containers",
         loadingContainers: "Loading containers...",
-        emptyContainers: "No running containers",
+        emptyContainers: "No containers",
         footer: "Docker Scheduler © 2026",
         // Dynamic
         runs: "runs",
@@ -156,6 +154,48 @@ const translations = {
 };
 
 let currentLang = localStorage.getItem('dockerSchedulerLang') || 'en'; // Default EN
+
+// Remove a stopped container
+async function removeContainer(name) {
+    if (!confirm(`¿Eliminar contenedor "${name}"?`)) return;
+
+    try {
+        const response = await fetch(`${API_URL}/containers/${name}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to remove container');
+        }
+
+        showToast('Contenedor eliminado', 'success');
+        await loadContainers();
+    } catch (error) {
+        console.error('Error removing container:', error);
+        showToast(t('errorGeneric'), 'error');
+    }
+}
+
+// Run schedule immediately
+async function runScheduleNow(id) {
+    try {
+        const response = await fetch(`${API_URL}/schedules/${id}/run`, {
+            method: 'POST'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to run schedule');
+        }
+
+        showToast('Schedule ejecutado correctamente', 'success');
+        // Reload containers to show the new run
+        setTimeout(loadContainers, 1000);
+        setTimeout(loadHistory, 1000);
+    } catch (error) {
+        console.error('Error running schedule:', error);
+        showToast(t('errorGeneric'), 'error');
+    }
+}
 
 function changeLanguage(lang) {
     if (!translations[lang]) return;
@@ -254,6 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSchedules();
     loadHistory();
     loadContainers();
+    loadSystemStatus();
     scheduleForm.addEventListener('submit', handleFormSubmit);
     addEnvVarBtn.addEventListener('click', addEnvVarRow);
     addTimeBtn.addEventListener('click', addTimeRow);
@@ -539,6 +580,11 @@ function renderScheduleCard(schedule) {
                 <div class="schedule-primary-row">
                     <div class="schedule-info">
                         <div class="schedule-details">
+                            ${schedule.run_name ? `<div class="schedule-run-name" title="Nombre del contenedor">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;margin-right:4px;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                ${escapeHtml(schedule.run_name)}
+                                ${!schedule.active ? '<span class="status-dot red" title="Schedule inactivo"></span>' : ''}
+                            </div>` : (!schedule.active ? '<div class="schedule-run-name"><span class="status-dot red" title="Schedule inactivo" style="margin-left:0;"></span> <span style="font-size:0.75rem; color:var(--text-tertiary);">Inactivo</span></div>' : '')}
                             <div class="schedule-days">
                                 ${dayLabels}
                             </div>
@@ -550,6 +596,11 @@ function renderScheduleCard(schedule) {
                         </div>
                     </div>
                     <div class="schedule-actions">
+                        <button class="btn-icon" onclick="runScheduleNow(${schedule.id})" title="Ejecutar ahora">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                            </svg>
+                        </button>
                         <button class="btn-icon" onclick="openExceptionModal(${schedule.id})" title="${t('exceptionModalTitle')}">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -575,7 +626,7 @@ function renderScheduleCard(schedule) {
                 ${envVarsContent}
             </div>
         </div>
-    `;
+        `;
 }
 
 // Format env vars Badge
@@ -590,7 +641,7 @@ function formatEnvVarsBadge(envVars, scheduleId) {
             </svg>
             <span>${count} var${count > 1 ? 's' : ''}</span>
         </button>
-    `;
+        `;
 }
 
 // Format env vars Content
@@ -603,13 +654,13 @@ function formatEnvVarsContent(envVars, scheduleId) {
             <span class="env-equals">=</span>
             <span class="env-value">${escapeHtml(value)}</span>
         </div>
-    `).join('');
+        `).join('');
 
     return `
         <div id="env-vars-${scheduleId}" class="env-vars-expandable">
             ${listHtml}
         </div>
-    `;
+        `;
 }
 
 // Toggle Inline Expandable visibility
@@ -633,7 +684,7 @@ function addRandomTimeInputs() {
         <div class="form-row" style="align-items: flex-end; gap: 0.5rem; display: flex;">
             <div class="form-group" style="margin-bottom: 0;">
                 <label for="randomDelay" data-i18n="randomDelayLabel">${t('randomDelayLabel')}</label>
-                <input type="number" id="randomDelay" class="time-input" min="1" placeholder="5" required>
+                <input type="number" id="randomDelay" class="time-input" min="1" required>
             </div>
             <button type="button" class="btn-remove" onclick="removeRandomTime()">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -641,7 +692,7 @@ function addRandomTimeInputs() {
                 </svg>
             </button>
         </div>
-    `;
+        `;
     addRandomTimeBtn.style.display = 'none';
     if (randomTimeHelper) randomTimeHelper.style.display = 'block';
 }
@@ -1201,11 +1252,17 @@ function renderContainers(containers) {
         return;
     }
 
-    containersList.innerHTML = containers.map(container => `
-        <div class="container-item">
+    containersList.innerHTML = containers.map(container => {
+        const isStopped = container.state.toLowerCase() !== 'running';
+        return `
+        <div class="container-item ${isStopped ? 'stopped' : ''}">
             <div class="container-info">
-                <span class="container-name">${escapeHtml(container.name)}</span>
+                <span class="container-name">
+                    ${escapeHtml(container.name)}
+                    ${isStopped ? '<span class="status-dot red" title="Contenedor detenido"></span>' : '<span class="status-dot green" title="Contenedor corriendo"></span>'}
+                </span>
                 <span class="container-image">${escapeHtml(container.image)}</span>
+                <span class="container-status ${isStopped ? 'status-stopped' : 'status-running'}">${escapeHtml(container.state)}</span>
                 ${container.ports ? `<span class="container-ports">${escapeHtml(container.ports)}</span>` : ''}
             </div>
             <div class="container-actions">
@@ -1215,14 +1272,21 @@ function renderContainers(containers) {
                          <circle cx="12" cy="12" r="3"></circle>
                     </svg>
                 </button>
+                ${!isStopped ? `
                 <button class="btn-stop" onclick="stopContainer('${escapeHtml(container.name)}')" title="${t('stopContainer')}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="6" y="6" width="12" height="12" rx="2"/>
                     </svg>
-                </button>
+                </button>` : `
+                <button class="btn-stop" onclick="removeContainer('${escapeHtml(container.name)}')" title="Eliminar contenedor">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                </button>`}
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Stop a running container
@@ -1369,4 +1433,43 @@ window.toggleEnvExpandable = toggleEnvExpandable;
 window.closeConfirmModal = closeConfirmModal;
 window.closeLogModal = closeLogModal;
 window.toggleFormSection = toggleFormSection;
+window.runScheduleNow = runScheduleNow;
+window.removeContainer = removeContainer;
 
+
+// Load System Status (Time & Timezone)
+async function loadSystemStatus() {
+    try {
+        const response = await fetch(`${API_URL}/status`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const serverTimeEl = document.getElementById('serverTime');
+        const container = document.getElementById('serverTimeContainer');
+
+        if (serverTimeEl) {
+            // Check for timezone difference
+            const clientTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const isDifferent = data.timezone && clientTimezone &&
+                data.timezone !== clientTimezone &&
+                !clientTimezone.includes(data.timezone); // simple check
+
+            let timeText = `${data.server_time} (${data.timezone})`;
+
+            if (isDifferent) {
+                // timeText += ' ⚠️'; // Removed warning emoji as per user request
+                container.title = `Your timezone (${clientTimezone}) is different from Server Time. Schedules run on Server Time.`;
+                container.style.color = '#94a3b8'; // Keep default color even if different
+            } else {
+                container.style.color = '#94a3b8'; // Default color
+            }
+
+            serverTimeEl.textContent = timeText;
+        }
+
+        // Refresh every minute
+        setTimeout(loadSystemStatus, 60000);
+    } catch (error) {
+        console.error('Error loading system status:', error);
+    }
+}

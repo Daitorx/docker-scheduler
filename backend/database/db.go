@@ -8,7 +8,7 @@ import (
 
 	"docker-scheduler/models"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 var DB *sql.DB
@@ -16,7 +16,7 @@ var DB *sql.DB
 // Initialize creates the database connection and tables
 func Initialize(dbPath string) error {
 	var err error
-	DB, err = sql.Open("sqlite3", dbPath)
+	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
@@ -56,6 +56,21 @@ func Initialize(dbPath string) error {
 		FOREIGN KEY(schedule_id) REFERENCES schedules(id)
 	);`
 	if _, err := DB.Exec(createLogsTableSQL); err != nil {
+		log.Fatal(err)
+	}
+
+	// Create Scheduled Executions table for random delay calculations
+	createScheduledExecutionsSQL := `CREATE TABLE IF NOT EXISTS scheduled_executions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		schedule_id INTEGER NOT NULL,
+		execution_date TEXT NOT NULL,
+		base_time TEXT NOT NULL,
+		calculated_time TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(schedule_id, execution_date),
+		FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
+	);`
+	if _, err := DB.Exec(createScheduledExecutionsSQL); err != nil {
 		log.Fatal(err)
 	}
 
@@ -392,4 +407,38 @@ func GetRunningExecutions() ([]models.ExecutionLog, error) {
 		logs = append(logs, log)
 	}
 	return logs, nil
+}
+
+// GetScheduledExecution retrieves the calculated execution time for a specific schedule and date
+func GetScheduledExecution(scheduleID int, executionDate string) (string, error) {
+	var calculatedTime string
+	err := DB.QueryRow(
+		"SELECT calculated_time FROM scheduled_executions WHERE schedule_id = ? AND execution_date = ?",
+		scheduleID, executionDate,
+	).Scan(&calculatedTime)
+	
+	if err == sql.ErrNoRows {
+		return "", nil // No scheduled execution found
+	}
+	if err != nil {
+		return "", err
+	}
+	
+	return calculatedTime, nil
+}
+
+// SaveScheduledExecution stores the calculated execution time for a specific schedule and date
+func SaveScheduledExecution(scheduleID int, executionDate string, baseTime string, calculatedTime string) error {
+	_, err := DB.Exec(
+		"INSERT OR REPLACE INTO scheduled_executions (schedule_id, execution_date, base_time, calculated_time) VALUES (?, ?, ?, ?)",
+		scheduleID, executionDate, baseTime, calculatedTime,
+	)
+	return err
+}
+
+// CleanupOldScheduledExecutions removes scheduled executions older than 7 days
+func CleanupOldScheduledExecutions() error {
+	cutoffDate := time.Now().AddDate(0, 0, -7).Format("2006-01-02")
+	_, err := DB.Exec("DELETE FROM scheduled_executions WHERE execution_date < ?", cutoffDate)
+	return err
 }

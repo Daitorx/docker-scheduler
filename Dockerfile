@@ -1,8 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache gcc musl-dev tzdata
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -16,7 +13,8 @@ RUN go mod download
 COPY backend/ .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o docker-scheduler .
+# CGO_ENABLED=0 for pure Go build (faster, no gcc needed)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o docker-scheduler .
 
 # Runtime stage
 FROM alpine:latest

@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"docker-scheduler/database"
 	"docker-scheduler/models"
@@ -48,7 +50,13 @@ func CreateSchedule(c *gin.Context) {
 		autoRemove = *req.AutoRemove
 	}
 
-	schedule, err := database.CreateSchedule(req.ContainerName, req.RunName, req.Ports, autoRemove, req.Days, req.Times, req.ExceptionDates, req.EnvVars, req.RandomDelay)
+	// Generate random name if not provided
+	runName := req.RunName
+	if runName == "" {
+		runName = fmt.Sprintf("%s-%d", req.ContainerName, time.Now().Unix())
+	}
+
+	schedule, err := database.CreateSchedule(req.ContainerName, runName, req.Ports, autoRemove, req.Days, req.Times, req.ExceptionDates, req.EnvVars, req.RandomDelay)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -97,6 +105,22 @@ func ToggleSchedule(c *gin.Context) {
 
 	schedule, _ := database.GetScheduleByID(id)
 	c.JSON(http.StatusOK, schedule)
+}
+
+// RunSchedule triggers a schedule immediately
+func RunSchedule(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+		return
+	}
+
+	if err := scheduler.RunScheduleNow(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Schedule triggered successfully"})
 }
 
 // ExceptionRequest is the request body for exception date operations
@@ -194,7 +218,7 @@ type ContainerInfo struct {
 
 // GetRunningContainers returns a list of running Docker containers
 func GetRunningContainers(c *gin.Context) {
-	cmd := exec.Command("docker", "ps", "--format", "{{.ID}}|{{.Names}}|{{.Image}}|{{.State}}|{{.Ports}}")
+	cmd := exec.Command("docker", "ps", "-a", "--format", "{{.ID}}|{{.Names}}|{{.Image}}|{{.State}}|{{.Ports}}")
 	output, err := cmd.Output()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list containers"})
@@ -246,6 +270,24 @@ func StopContainer(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Container stopped", "container": name})
+}
+
+// RemoveContainer removes a stopped container
+func RemoveContainer(c *gin.Context) {
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Container name is required"})
+		return
+	}
+
+	cmd := exec.Command("docker", "rm", "-f", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": string(output)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Container removed", "container": name})
 }
 
 // GetContainerLogs returns logs for a specific container

@@ -1,0 +1,15 @@
+services:
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: docker-scheduler:latest
+    container_name: docker-scheduler
+    ports:
+      - "8080:8080"
+    environment:
+      - TZ=Europe/Madrid
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped

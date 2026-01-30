@@ -36,7 +36,7 @@
             <section class="form-section glass-card">
                 <div class="section-header" onclick="toggleFormSection()">
                     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 18l6-6-6-6"/>
+                        <path d="M9 18l6-6-6-6" />
                     </svg>
                     <h2 data-i18n="newSchedule">New Schedule</h2>
                 </div>
@@ -196,7 +196,7 @@
             </section>
 
             <section class="containers-section">
-                <h2 data-i18n="containersTitle">Running Containers</h2>
+                <h2 data-i18n="containersTitle">Containers</h2>
                 <div id="containersList" class="containers-list">
                     <div class="loading">
                         <div class="spinner"></div>
@@ -207,7 +207,8 @@
         </main>
 
         <footer>
-            <p data-i18n="footer">Docker Scheduler &copy; 2026</p>
+            <p><span data-i18n="footer">Docker Scheduler &copy; 2026</span> | <span id="serverTimeContainer"
+                    style="font-size: 0.9em; color: #94a3b8;">Server Time: <span id="serverTime">--:--</span></span></p>
         </footer>
     </div>
 
@@ -288,7 +289,7 @@
         </div>
     </div>
 
-    <script src="/js/app.js?v=7"></script>
+    <script src="/js/app.js?v=10"></script>
 </body>
 
 </html>

@@ -45,6 +45,7 @@ func main() {
 		api.POST("/schedules", handlers.CreateSchedule)
 		api.DELETE("/schedules/:id", handlers.DeleteSchedule)
 		api.PUT("/schedules/:id/toggle", handlers.ToggleSchedule)
+		api.POST("/schedules/:id/run", handlers.RunSchedule)
 		api.POST("/schedules/:id/exceptions", handlers.AddException)
 		api.DELETE("/schedules/:id/exceptions", handlers.RemoveException)
 		api.GET("/history", handlers.GetExecutionHistory)
@@ -52,6 +53,8 @@ func main() {
 		api.GET("/containers", handlers.GetRunningContainers)
 		api.GET("/containers/:name/logs", handlers.GetContainerLogs)
 		api.POST("/containers/:name/stop", handlers.StopContainer)
+		api.DELETE("/containers/:name", handlers.RemoveContainer)
+		api.GET("/status", handlers.GetSystemStatus)
 	}
 
 	// Trust all proxies (required for Docker/Tailscale)
