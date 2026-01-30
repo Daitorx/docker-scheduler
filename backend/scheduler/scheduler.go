@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"docker-scheduler/database"
@@ -261,8 +262,17 @@ func RunScheduleNow(id int) error {
 	return nil
 }
 
+// executionLocks tracks running schedules to prevent duplicates
+var executionLocks sync.Map
+
 // runContainer runs a Docker container from an image with environment variables
 func runContainer(scheduleID int, containerName string, runName string, ports []string, autoRemove bool, envVars map[string]string, scheduledTime string, randomDelay int) {
+	// Guard: Prevent concurrent executions of the same schedule
+	if _, loaded := executionLocks.LoadOrStore(scheduleID, true); loaded {
+		log.Printf("Skipping execution for Schedule %d ('%s'): Already running", scheduleID, containerName)
+		return
+	}
+	defer executionLocks.Delete(scheduleID)
 	log.Printf(">>> START EXECUTION [ScheduleID: %d] Container: '%s' (RunName: '%s')", scheduleID, containerName, runName)
 
 	// If container has a name, stop and remove existing container first
