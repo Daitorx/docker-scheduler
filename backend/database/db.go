@@ -60,6 +60,11 @@ func Initialize(dbPath string) error {
 	}
 
 	// Create Scheduled Executions table for random delay calculations
+	// Note: We drop and recreate this table to ensure the UNIQUE constraint is correct (including base_time)
+	// This is safe because this table is temporary/cache.
+	dropTableSQL := `DROP TABLE IF EXISTS scheduled_executions;`
+	DB.Exec(dropTableSQL)
+
 	createScheduledExecutionsSQL := `CREATE TABLE IF NOT EXISTS scheduled_executions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		schedule_id INTEGER NOT NULL,
@@ -67,7 +72,7 @@ func Initialize(dbPath string) error {
 		base_time TEXT NOT NULL,
 		calculated_time TEXT NOT NULL,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		UNIQUE(schedule_id, execution_date),
+		UNIQUE(schedule_id, execution_date, base_time),
 		FOREIGN KEY(schedule_id) REFERENCES schedules(id) ON DELETE CASCADE
 	);`
 	if _, err := DB.Exec(createScheduledExecutionsSQL); err != nil {
@@ -410,20 +415,20 @@ func GetRunningExecutions() ([]models.ExecutionLog, error) {
 }
 
 // GetScheduledExecution retrieves the calculated execution time for a specific schedule and date
-func GetScheduledExecution(scheduleID int, executionDate string) (string, error) {
+func GetScheduledExecution(scheduleID int, executionDate string, baseTime string) (string, error) {
 	var calculatedTime string
 	err := DB.QueryRow(
-		"SELECT calculated_time FROM scheduled_executions WHERE schedule_id = ? AND execution_date = ?",
-		scheduleID, executionDate,
+		"SELECT calculated_time FROM scheduled_executions WHERE schedule_id = ? AND execution_date = ? AND base_time = ?",
+		scheduleID, executionDate, baseTime,
 	).Scan(&calculatedTime)
-	
+
 	if err == sql.ErrNoRows {
 		return "", nil // No scheduled execution found
 	}
 	if err != nil {
 		return "", err
 	}
-	
+
 	return calculatedTime, nil
 }
 

@@ -108,10 +108,10 @@ func RefreshSchedules() {
 func calculateOrRetrieveRandomTime(scheduleID int, baseTimeStr string, delayMinutes int) string {
 	today := time.Now().Format("2006-01-02")
 
-	// Try to get existing calculated time for today
-	calculatedTime, err := database.GetScheduledExecution(scheduleID, today)
+	// Try to get existing calculated time for today AND this base time
+	calculatedTime, err := database.GetScheduledExecution(scheduleID, today, baseTimeStr)
 	if err == nil && calculatedTime != "" {
-		log.Printf("Using existing calculated time for schedule %d: %s", scheduleID, calculatedTime)
+		log.Printf("Using existing calculated time for schedule %d (base %s): %s", scheduleID, baseTimeStr, calculatedTime)
 		return calculatedTime
 	}
 
@@ -139,15 +139,15 @@ func scheduleRandomDelayOnStartup(scheduleID int, containerName, runName string,
 	now := time.Now()
 	today := now.Format("2006-01-02")
 
-	// Check if we already calculated a time for today
-	calculatedTime, err := database.GetScheduledExecution(scheduleID, today)
+	// Check if we already calculated a time for today AND this base time
+	calculatedTime, err := database.GetScheduledExecution(scheduleID, today, baseTimeStr)
 	if err == nil && calculatedTime != "" {
 		// We have a stored time, use it
 		parsed, _ := time.Parse("15:04", calculatedTime)
 		scheduled := time.Date(now.Year(), now.Month(), now.Day(), parsed.Hour(), parsed.Minute(), 0, 0, now.Location())
 
 		if scheduled.After(now) {
-			log.Printf("Using existing calculated time for schedule %d: %s", scheduleID, calculatedTime)
+			log.Printf("Using existing calculated time for schedule %d (base %s): %s", scheduleID, baseTimeStr, calculatedTime)
 			scheduleOneOff(scheduleID, containerName, runName, ports, autoRemove, envVars, exceptionDates, baseTimeStr, delayMinutes, calculatedTime)
 		}
 		return
@@ -316,7 +316,10 @@ func runContainer(scheduleID int, containerName string, runName string, ports []
 	// Create initial log entry with scheduled time and delay
 	logID, logErr := database.CreateExecutionLog(scheduleID, containerName, actualDockerName, scheduledTime, randomDelay)
 	if logErr != nil {
-		log.Printf("Failed to create execution log: %v", logErr)
+		// CRITICAL: If we cannot log to DB (e.g. locked), we should NOT run the container
+		// to avoid ghost executions and further instability.
+		log.Printf("CRITICAL: Failed to create execution log: %v. ABORTING execution for Schedule %d ('%s')", logErr, scheduleID, containerName)
+		return
 	}
 
 	cmd := exec.Command("docker", args...)
